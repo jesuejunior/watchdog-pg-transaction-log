@@ -1,5 +1,6 @@
 import json
-
+from datetime import datetime
+import re
 import structlog
 from sqlalchemy.exc import OperationalError, IntegrityError, ProgrammingError
 from sqlalchemy import create_engine
@@ -103,12 +104,11 @@ def data_simulator(event=None, context=None):
     logger = structlog.get_logger()
     with sessionmaker(bind=get_database_connection())() as session:
         for schema in ['public', 'gplus', 'iklin']:
-            for i in range(10000):
-                query = text(f"INSERT INTO {schema}.django_migrations (app, name, applied) VALUES('x-{schema}-{i}', 'name-{schema}-{i**2}', NOW()); COMMIT;")
+            for i in range(1000):
+                # query = text(f"INSERT INTO {schema}.django_migrations (app, name, applied) VALUES('x-{schema}-{i}', 'name-{schema}-{i**2}', NOW()); COMMIT;")
+                query = text(re.sub(r"\[|\]", "", f"INSERT INTO {schema}.django_migrations (app, name, applied) VALUES {[(f'x-{schema}-{i}', f'name-{schema}-{i**2}', datetime.now().isoformat()) for i in range(1000)]}; COMMIT;"))
                 logger.info(f"schema: {schema}, i:{i}, query: {query}")
                 result = session.execute(query)
-                # logger.info(f"""{result.rowcount} """)
-                # logger.info(f"""{result.rowcount}, inserted_pk: {result.inserted_primary_key}, pk_rows: {result.inserted_primary_key_rows}""")
     logger.info("All data inserted")
 
 
