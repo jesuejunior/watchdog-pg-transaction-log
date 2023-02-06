@@ -1,0 +1,93 @@
+service: watchdog-pg-log
+
+frameworkVersion: '3'
+
+custom: ${file(./.env.yml)}
+
+provider:
+  name: aws
+  stage: ${opt:stage, 'dev'}
+  profile: ${self:custom.${opt:stage, 'dev'}.profile}
+  runtime: python3.9
+  region: ${opt:region, 'us-east-1'}
+  vpc:
+    securityGroupIds: ${self:custom.${opt:stage, 'dev'}.vpc_security_group_ids}
+    subnetIds: ${self:custom.${opt:stage, 'dev'}.vpc_subnet_ids}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - kms:Decrypt
+            - secretsmanager:DescribeSecret
+            - secretsmanager:GetSecretValue
+            - secretsmanager:ListSecrets
+          Resource: 'arn:aws:secretsmanager:${aws:region}:${aws:accountId}:secret:DATABASE_URL-eFpogG'
+
+functions:
+  simulator:
+    handler: handler.data_simulator
+    timeout: 300
+    memorySize: 128
+    events:
+      - schedule:
+          rate: rate(6 minutes)
+          enabled: false
+
+  transactionLog:
+    handler: handler.run
+    events:
+      - eventBridge:
+          enabled: true
+          pattern:
+            source:
+              - 'aws.cloudwatch'
+            detail-type:
+              - 'CloudWatch Alarm State Change'
+            resources:
+              - "arn:aws:cloudwatch:${aws:region}:${aws:accountId}:alarm:awsrds-poc-db-High-Transaction-Logs-Disk-Usage" # Nome Repetido
+#OPTION 2
+#            detail:
+#              alarmName": "awsrds-poc-db-High-Transaction-Logs-Disk-Usage"
+
+    timeout: 30  # in seconds
+
+resources:
+  Resources:
+    TransactionLogDiskAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: awsrds-poc-db-High-Transaction-Logs-Disk-Usage
+        ActionsEnabled: true
+        OKActions: [ ]
+        AlarmActions: [ ]
+        InsufficientDataActions: [ ]
+        MetricName: TransactionLogsDiskUsage
+        Namespace: AWS/RDS
+        Statistic: Average
+        Dimensions:
+          - Name: DBInstanceIdentifier
+            Value: poc-db
+        Period: 60
+        EvaluationPeriods: 1
+        DatapointsToAlarm: 1
+        Threshold: 3000000000
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+#creating the custom VPC Endpoint
+    SMInterfaceEndpoint:
+      Type: 'AWS::EC2::VPCEndpoint'
+      Properties:
+        VpcEndpointType: Interface
+        ServiceName: 'com.amazonaws.${aws:region}.secretsmanager'
+        PrivateDnsEnabled: true
+        VpcId: ${self:custom.${opt:stage, 'dev'}.vpc_id}
+        SubnetIds: ${self:custom.${opt:stage, 'dev'}.vpc_subnet_ids}
+        SecurityGroupIds: ${self:custom.${opt:stage, 'dev'}.vpc_security_group_ids}
+
+package:
+  exclude:
+    - .env.*
+    - node_modules/**
+
+plugins:
+  - serverless-python-requirements
