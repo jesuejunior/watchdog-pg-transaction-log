@@ -22,7 +22,7 @@ provider:
             - secretsmanager:DescribeSecret
             - secretsmanager:GetSecretValue
             - secretsmanager:ListSecrets
-          Resource: 'arn:aws:secretsmanager:${aws:region}:${aws:accountId}:secret:DATABASE_URL-eFpogG'
+          Resource: 'arn:aws:secretsmanager:${aws:region}:${aws:accountId}:secret:DATABASE_URL-eFpogG' #TODO: Set the secret name as var
 
 functions:
   simulator:
@@ -45,10 +45,10 @@ functions:
             detail-type:
               - 'CloudWatch Alarm State Change'
             resources:
-              - "arn:aws:cloudwatch:${aws:region}:${aws:accountId}:alarm:awsrds-poc-db-High-Transaction-Logs-Disk-Usage" # Nome Repetido
+              - "arn:aws:cloudwatch:${aws:region}:${aws:accountId}:alarm:awsrds-${self:custom.${opt:stage, 'dev'}.database_instance_name}-High-Transaction-Logs-Disk-Usage" # Nome Repetido
 #OPTION 2
 #            detail:
-#              alarmName": "awsrds-poc-db-High-Transaction-Logs-Disk-Usage"
+#              alarmName": "awsrds-${self:custom.${opt:stage, 'dev'}.database_instance_name}-High-Transaction-Logs-Disk-Usage"
 
     timeout: 30  # in seconds
 
@@ -57,7 +57,7 @@ resources:
     TransactionLogDiskAlarm:
       Type: AWS::CloudWatch::Alarm
       Properties:
-        AlarmName: awsrds-poc-db-High-Transaction-Logs-Disk-Usage
+        AlarmName: awsrds-${self:custom.${opt:stage, 'dev'}.database_instance_name}-High-Transaction-Logs-Disk-Usage
         ActionsEnabled: true
         OKActions: [ ]
         AlarmActions: [ ]
