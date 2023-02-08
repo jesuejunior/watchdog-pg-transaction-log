@@ -47,19 +47,18 @@ def configure_db(event=None, context=None):
         cmds = [
         f"CREATE USER data_stream WITH ENCRYPTED PASSWORD '{password}';",
         "GRANT RDS_REPLICATION TO data_stream;",
-
         "GRANT SELECT ON ALL TABLES IN SCHEMA public TO data_stream;",
-        "GRANT SELECT ON ALL TABLES IN SCHEMA iklin TO data_stream;",
-        "GRANT SELECT ON ALL TABLES IN SCHEMA gplus TO data_stream;",
-        "GRANT SELECT ON ALL TABLES IN SCHEMA test TO data_stream;",
-
         "GRANT USAGE ON SCHEMA public TO data_stream;",
-        "GRANT USAGE ON SCHEMA iklin TO data_stream;",
-        "GRANT USAGE ON SCHEMA gplus TO data_stream;",
-        "GRANT USAGE ON SCHEMA test TO data_stream;",
-
         "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO data_stream;"
-                ]
+
+        # Only to use in crm public snapshot on AWS
+        # "GRANT SELECT ON ALL TABLES IN SCHEMA iklin TO data_stream;",
+        # "GRANT SELECT ON ALL TABLES IN SCHEMA gplus TO data_stream;",
+        # "GRANT SELECT ON ALL TABLES IN SCHEMA test TO data_stream;",
+        # "GRANT USAGE ON SCHEMA iklin TO data_stream;",
+        # "GRANT USAGE ON SCHEMA gplus TO data_stream;",
+        # "GRANT USAGE ON SCHEMA test TO data_stream;",
+        ]
 
         for cmd in cmds:
             try:
