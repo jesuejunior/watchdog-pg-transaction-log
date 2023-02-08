@@ -148,4 +148,3 @@ metastore_db/**
 node_modules/
 package-lock.json
 package.json
-.env.yml
