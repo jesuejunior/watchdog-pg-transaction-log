@@ -1,3 +1,4 @@
+import os
 import json
 from datetime import datetime
 import re
@@ -7,12 +8,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.sql import text
 from sqlalchemy.orm import sessionmaker
 
-from log import configure_logging
-from secret_manager import get_secret
+from .log import configure_logging
+from .secret_manager import get_secret
 
 
 def get_database_connection():
-    return create_engine(get_secret("DATABASE_URL")).execution_options(isolation_level="AUTOCOMMIT")
+    return create_engine(get_secret(f"{os.environ.get('ENV')}/RDS/DATABASE_URL")).execution_options(isolation_level="AUTOCOMMIT")
 
 """
 Table pg_stat_activity
@@ -26,7 +27,7 @@ def configure_db(event=None, context=None):
     configure_logging()
     logger = structlog.get_logger()
     logger.info("Running")
-    password = "XXXX1234"
+    password = get_secret(f"{os.environ.get('ENV')}/RDS/data_stream")
     with sessionmaker(bind=get_database_connection())() as session:
         # Validate the wal level is logical
         query = text("show wal_level;")
@@ -102,12 +103,13 @@ def data_simulator(event=None, context=None):
     configure_logging()
     logger = structlog.get_logger()
     with sessionmaker(bind=get_database_connection())() as session:
-        for schema in ['public', 'gplus', 'iklin']:
-            for i in range(1000):
-                # query = text(f"INSERT INTO {schema}.django_migrations (app, name, applied) VALUES('x-{schema}-{i}', 'name-{schema}-{i**2}', NOW()); COMMIT;")
-                query = text(re.sub(r"\[|\]", "", f"INSERT INTO {schema}.django_migrations (app, name, applied) VALUES {[(f'x-{schema}-{i}', f'name-{schema}-{i**2}', datetime.now().isoformat()) for i in range(1000)]}; COMMIT;"))
-                logger.info(f"schema: {schema}, i:{i}, query: {query}")
-                result = session.execute(query)
+        table_query = text("CREATE TABLE IF NOT EXISTS public.data_simulator (name character varying(120), version character varying(100), applied TIMESTAMP);COMMIT;")
+        is_created = session.execute(table_query)
+        if is_created:
+            for i in range(10000):
+                query = text(re.sub(r"\[|\]", "", f"INSERT INTO public.data_simulator (app, name, applied) VALUES {[(f'x-{i}', f'version-{i**2}', datetime.now().isoformat()) for i in range(1000)]};COMMIT;"))
+                logger.info(f"i:{i}, query: {query}")
+                session.execute(query)
     logger.info("All data inserted")
 
 
