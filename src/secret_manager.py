@@ -1,8 +1,14 @@
 import boto3
 from botocore.exceptions import ClientError
+import structlog
+from .log import configure_logging
 
 
 def get_secret(secret_name: str, region_name: str = "us-east-1"):
+    configure_logging()
+    logger = structlog.get_logger()
+    logger.debug(f"Getting secret for: {secret_name}")
+
     # secret_name = "DATABASE_URL"
     # region_name = "us-east-1"
 
@@ -23,4 +29,5 @@ def get_secret(secret_name: str, region_name: str = "us-east-1"):
         raise e
 
     # Decrypts secret using the associated KMS key.
+    logger.debug(f"Credential for: {secret_name} acquired")
     return get_secret_value_response['SecretString']
