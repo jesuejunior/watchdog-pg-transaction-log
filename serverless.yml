@@ -1,4 +1,4 @@
-service: watchdog-pg-log
+service: watchdog-data-stream
 
 frameworkVersion: '3'
 
@@ -10,6 +10,9 @@ provider:
   profile: ${self:custom.${opt:stage, 'dev'}.profile}
   runtime: python3.9
   region: ${opt:region, 'us-east-1'}
+  memorySize: 128
+  environment:
+    ENV: ${opt:stage, 'dev'}
   vpc:
     securityGroupIds: ${self:custom.${opt:stage, 'dev'}.vpc_security_group_ids}
     subnetIds: ${self:custom.${opt:stage, 'dev'}.vpc_subnet_ids}
@@ -18,15 +21,17 @@ provider:
       statements:
         - Effect: Allow
           Action:
+            - secretsmanager:ListSecrets
             - kms:Decrypt
             - secretsmanager:DescribeSecret
             - secretsmanager:GetSecretValue
-            - secretsmanager:ListSecrets
-          Resource: 'arn:aws:secretsmanager:${aws:region}:${aws:accountId}:secret:DATABASE_URL-eFpogG'
+          Resource:
+          - "arn:aws:secretsmanager:${aws:region}:${aws:accountId}:secret:${opt:stage}/RDS/DATABASE_URL*"
+          - "arn:aws:secretsmanager:${aws:region}:${aws:accountId}:secret:${opt:stage}/RDS/data_stream*"
 
 functions:
   simulator:
-    handler: handler.data_simulator
+    handler: src/handler.data_simulator
     timeout: 300
     memorySize: 128
     events:
@@ -34,8 +39,17 @@ functions:
           rate: rate(6 minutes)
           enabled: false
 
+  configureDB:
+    handler: src/handler.configure_db
+    timeout: 300
+    memorySize: 128
+    events:
+      - schedule:
+          rate: rate(24 hours)
+          enabled: false
+
   transactionLog:
-    handler: handler.run
+    handler: src/handler.run
     events:
       - eventBridge:
           enabled: true
@@ -45,19 +59,19 @@ functions:
             detail-type:
               - 'CloudWatch Alarm State Change'
             resources:
-              - "arn:aws:cloudwatch:${aws:region}:${aws:accountId}:alarm:awsrds-poc-db-High-Transaction-Logs-Disk-Usage" # Nome Repetido
+              - "arn:aws:cloudwatch:${aws:region}:${aws:accountId}:alarm:awsrds-${self:custom.${opt:stage, 'dev'}.database_instance_name}-High-Transaction-Logs-Disk-Usage"
 #OPTION 2
 #            detail:
-#              alarmName": "awsrds-poc-db-High-Transaction-Logs-Disk-Usage"
+#              alarmName": "awsrds-${self:custom.${opt:stage, 'dev'}.database_instance_name}-High-Transaction-Logs-Disk-Usage"
 
-    timeout: 30  # in seconds
+    timeout: 15  # in seconds
 
 resources:
   Resources:
     TransactionLogDiskAlarm:
       Type: AWS::CloudWatch::Alarm
       Properties:
-        AlarmName: awsrds-poc-db-High-Transaction-Logs-Disk-Usage
+        AlarmName: awsrds-${self:custom.${opt:stage, 'dev'}.database_instance_name}-High-Transaction-Logs-Disk-Usage
         ActionsEnabled: true
         OKActions: [ ]
         AlarmActions: [ ]
@@ -67,10 +81,10 @@ resources:
         Statistic: Average
         Dimensions:
           - Name: DBInstanceIdentifier
-            Value: poc-db
+            Value: ${self:custom.${opt:stage, 'dev'}.database_instance_name}
         Period: 60
-        EvaluationPeriods: 1
-        DatapointsToAlarm: 1
+        EvaluationPeriods: 10
+        DatapointsToAlarm: 10
         Threshold: 3000000000
         ComparisonOperator: GreaterThanOrEqualToThreshold
 #creating the custom VPC Endpoint
