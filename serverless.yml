@@ -10,6 +10,7 @@ provider:
   profile: ${self:custom.${opt:stage, 'dev'}.profile}
   runtime: python3.9
   region: ${opt:region, 'us-east-1'}
+  timeout: 300
   memorySize: 128
   environment:
     ENV: ${opt:stage, 'dev'}
@@ -26,14 +27,12 @@ provider:
             - secretsmanager:DescribeSecret
             - secretsmanager:GetSecretValue
           Resource:
-          - "arn:aws:secretsmanager:${aws:region}:${aws:accountId}:secret:${opt:stage}/RDS/DATABASE_URL*"
-          - "arn:aws:secretsmanager:${aws:region}:${aws:accountId}:secret:${opt:stage}/RDS/data_stream*"
+          - "arn:aws:secretsmanager:${aws:region}:${aws:accountId}:secret:${self:custom.${opt:stage, 'dev'}.sm_data_stream_arn}"
+          - "arn:aws:secretsmanager:${aws:region}:${aws:accountId}:secret:${self:custom.${opt:stage, 'dev'}.sm_database_url_arn}"
 
 functions:
   simulator:
     handler: src/handler.data_simulator
-    timeout: 300
-    memorySize: 128
     events:
       - schedule:
           rate: rate(6 minutes)
@@ -41,8 +40,6 @@ functions:
 
   configureDB:
     handler: src/handler.configure_db
-    timeout: 300
-    memorySize: 128
     events:
       - schedule:
           rate: rate(24 hours)
@@ -64,7 +61,6 @@ functions:
 #            detail:
 #              alarmName": "awsrds-${self:custom.${opt:stage, 'dev'}.database_instance_name}-High-Transaction-Logs-Disk-Usage"
 
-    timeout: 15  # in seconds
 
 resources:
   Resources:
@@ -85,7 +81,7 @@ resources:
         Period: 60
         EvaluationPeriods: 10
         DatapointsToAlarm: 10
-        Threshold: 3000000000
+        Threshold: 2000000000
         ComparisonOperator: GreaterThanOrEqualToThreshold
 #creating the custom VPC Endpoint
     SMInterfaceEndpoint:

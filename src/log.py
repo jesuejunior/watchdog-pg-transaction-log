@@ -1,3 +1,4 @@
+import os
 import logging
 
 import structlog
@@ -17,6 +18,6 @@ def configure_logging():
         wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )
-
+    log_level = {"DEBUG": logging.DEBUG, "INFO": logging.INFO}
     logger = structlog.wrap_logger(logging.getLogger(""))
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(log_level.get(os.environ.get("LOGLEVEL", 'INFO')))
