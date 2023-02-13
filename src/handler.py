@@ -51,14 +51,6 @@ def configure_db(event=None, context=None):
         "GRANT SELECT ON ALL TABLES IN SCHEMA public TO data_stream;",
         "GRANT USAGE ON SCHEMA public TO data_stream;",
         "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO data_stream;"
-
-        # Only to use in crm public snapshot on AWS
-        # "GRANT SELECT ON ALL TABLES IN SCHEMA iklin TO data_stream;",
-        # "GRANT SELECT ON ALL TABLES IN SCHEMA gplus TO data_stream;",
-        # "GRANT SELECT ON ALL TABLES IN SCHEMA test TO data_stream;",
-        # "GRANT USAGE ON SCHEMA iklin TO data_stream;",
-        # "GRANT USAGE ON SCHEMA gplus TO data_stream;",
-        # "GRANT USAGE ON SCHEMA test TO data_stream;",
         ]
 
         for cmd in cmds:
@@ -68,6 +60,20 @@ def configure_db(event=None, context=None):
             except (IntegrityError, ProgrammingError) as ex:
                 logger.error(ex)
 
+
+def drop_slot():
+    configure_logging()
+    logger = structlog.get_logger()
+    with sessionmaker(bind=get_database_connection())() as session:
+        slot_exists = session.execute(text("SELECT slot_name from pg_replication_slots WHERE slot_name = 'data_stream_slot';")).first()
+        if slot_exists:
+            drop_slot_query = text("SELECT pg_drop_replication_slot('data_stream_slot');")
+            logger.info("Droping slot")
+            try:
+                session.execute(drop_slot_query)
+                logger.info(f"data_stream_slot was removed successfuly")
+            except Exception as ex:
+                logger.error(ex)
 
 def process(event=None, context=None):
     configure_logging()
@@ -79,24 +85,21 @@ def process(event=None, context=None):
             pid = result[0]
             print(f"Killing PID: {pid}")
             # starts" a request to terminate gracefully, which may be satisfied after some time
-            cancel_session_query = text(f"select pg_cancel_backend(pid) from pg_stat_activity where pid = '{pid}';")
-            # kill the proccess hardly
+            # README: Ask to stop the PID/process
+            # cancel_session_query = text(f"select pg_cancel_backend(pid) from pg_stat_activity where pid = '{pid}';")
+            # README: kill the proccess hardly
             kill_session_query = text(f"select pg_terminate_backend(pid) from pg_stat_activity where pid = '{pid}';")
-
             try:
                 logger.info("drop session")
-                kresult = session.execute(cancel_session_query)
+                kresult = session.execute(kill_session_query)
                 logger.info(kresult.all())
             except OperationalError as ex:
                 logger.error(ex)
+            drop_slot()
         else:
             logger.info("No process PID found, proceding")
-            slot_exists = session.execute(text("SELECT slot_name from pg_replication_slots WHERE slot_name = 'data_stream_slot';")).first()
-            if slot_exists:
-                drop_slot_query = text("SELECT pg_drop_replication_slot('data_stream_slot');")
-                logger.info("Droping slot")
-                session.execute(drop_slot_query)
-    print("ok")
+            drop_slot()
+    logger.info("Job was processed successfully")
 
 
 def data_simulator(event=None, context=None):
